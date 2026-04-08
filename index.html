@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ChatGPT Voice Input Prototype — India</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans', sans-serif; background: #0d0d0d; color: #e5e5e5; height: 100vh; overflow: hidden; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.15); opacity: 1; } }
+  @keyframes waveBar { 0%,100% { height: 4px; } 50% { height: var(--h); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes typing { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+  @keyframes nudgePop { 0% { transform: scale(0.8) translateY(8px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+  .app { display: flex; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; position: relative; }
+  .toggle-bar { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 8px 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .toggle-bar span { font-size: 10px; color: #666; font-weight: 600; letter-spacing: 1px; margin-right: 4px; }
+  .toggle-btn { padding: 4px 10px; border-radius: 20px; border: 1.5px solid #333; background: transparent; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.2s; font-family: inherit; }
+  .toggle-btn.on { background: var(--c-bg); border-color: var(--c); color: var(--c); }
+  .toggle-btn.off { color: #555; }
+  .header { background: #1a1a1a; padding: 10px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #2a2a2a; }
+  .header-icon { width: 32px; height: 32px; border-radius: 16px; background: #10a37f; display: flex; align-items: center; justify-content: center; }
+  .lang-toggle { margin-left: auto; display: flex; align-items: center; gap: 6px; background: #222; border-radius: 20px; padding: 4px 10px; }
+  .lang-toggle span { font-size: 11px; transition: all 0.2s; }
+  .switch { width: 36px; height: 20px; border-radius: 10px; cursor: pointer; padding: 2px; display: flex; align-items: center; transition: all 0.25s; }
+  .switch .knob { width: 16px; height: 16px; border-radius: 8px; background: #fff; transition: all 0.25s; }
+  .chat { flex: 1; overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+  .welcome { text-align: center; padding: 30px 20px; animation: fadeIn 0.5s ease; }
+  .welcome-icon { width: 48px; height: 48px; border-radius: 24px; background: #10a37f; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; }
+  .quick-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+  .chip { padding: 8px 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #ccc; font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .chip:hover { border-color: #10a37f; color: #10a37f; }
+  .msg { display: flex; animation: fadeIn 0.3s ease; }
+  .msg.user { justify-content: flex-end; }
+  .msg.assistant { justify-content: flex-start; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+  .bubble.user { background: #10a37f; color: #fff; border-bottom-right-radius: 4px; }
+  .bubble.assistant { background: #2a2a2a; color: #ddd; border-bottom-left-radius: 4px; }
+  .typing { display: flex; gap: 5px; padding: 12px 18px; background: #2a2a2a; border-radius: 16px; animation: fadeIn 0.3s; }
+  .typing .dot { width: 7px; height: 7px; border-radius: 4px; background: #888; }
+  .typing .dot:nth-child(1) { animation: typing 1s ease infinite 0s; }
+  .typing .dot:nth-child(2) { animation: typing 1s ease infinite 0.2s; }
+  .typing .dot:nth-child(3) { animation: typing 1s ease infinite 0.4s; }
+  .voice-overlay { position: absolute; bottom: 0; left: 0; right: 0; height: 200px; background: linear-gradient(to top, #0d0d0d 60%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: slideUp 0.3s ease; z-index: 10; }
+  .wave-bars { display: flex; gap: 3px; align-items: center; height: 40px; }
+  .wave-bar { width: 3px; border-radius: 2px; height: 4px; }
+  .preview-panel { padding: 12px 16px; background: #111; border-top: 1px solid #2a2a2a; animation: slideUp 0.3s ease; }
+  .preview-text { background: #1a1a1a; border-radius: 10px; padding: 10px 12px; border: 1px dashed #444; font-size: 14px; color: #e5e5e5; margin-bottom: 8px; line-height: 1.5; }
+  .preview-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .preview-actions button { padding: 7px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .btn-send { border: none; background: #10a37f; color: #fff; font-weight: 600; }
+  .btn-ghost { border: 1px solid #444; background: transparent; color: #ccc; }
+  .privacy-panel { padding: 12px 16px; background: #0f1f0f; border-top: 1px solid rgba(16,163,127,0.2); animation: slideUp 0.25s ease; }
+  .input-bar { padding: 10px 12px; background: #1a1a1a; border-top: 1px solid #2a2a2a; position: relative; }
+  .input-row { display: flex; align-items: center; gap: 8px; }
+  .text-input { flex: 1; height: 42px; border-radius: 21px; border: 1px solid #333; background: #0d0d0d; color: #e5e5e5; padding: 0 16px; font-size: 14px; font-family: inherit; }
+  .text-input:focus { outline: none; border-color: #10a37f; }
+  .mic-btn { width: 42px; height: 42px; border-radius: 21px; border: none; background: #2a2a2a; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; }
+  .send-btn { width: 42px; height: 42px; border-radius: 21px; border: none; background: #10a37f; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .shield-badge { position: absolute; top: -3px; right: -3px; width: 16px; height: 16px; border-radius: 8px; background: #10a37f; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 2px solid #1a1a1a; }
+  .nudge-tooltip { position: absolute; bottom: 58px; right: 12px; background: #10a37f; padding: 10px 14px; border-radius: 12px; max-width: 220px; font-size: 12px; color: #fff; line-height: 1.45; box-shadow: 0 6px 24px rgba(16,163,127,0.35); animation: nudgePop 0.35s cubic-bezier(0.34,1.56,0.64,1); z-index: 5; }
+  .nudge-tooltip .arrow { position: absolute; bottom: -7px; right: 20px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 7px solid #10a37f; }
+  .nudge-tooltip .close { position: absolute; top: 4px; right: 8px; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 14px; cursor: pointer; }
+  .long-nudge { position: absolute; bottom: 58px; left: 12px; right: 12px; background: #1a2a1a; border: 1px solid rgba(16,163,127,0.2); border-radius: 10px; padding: 8px 12px; font-size: 11px; color: #10a37f; animation: fadeIn 0.3s ease; z-index: 5; }
+  .whisper-hint { text-align: center; margin-top: 6px; font-size: 10px; color: #444; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// Smart response engine with broad keyword matching
+const RESPONSE_RULES = [
+  { keys: ["hi","hey","hello","hii","hola","sup","yo","namaste","kaise ho"], en: "Hey there! 👋 I'm ChatGPT. You can ask me anything — explain concepts, help with homework, brainstorm ideas, write essays, debug code, or just chat. What's on your mind?", hi: "Hey! 👋 Main ChatGPT hoon. Mujhse kuch bhi poocho — concepts explain karna ho, homework mein help chahiye, ideas brainstorm karne ho, ya bas baat karni ho. Bolo, kya help karun?" },
+  { keys: ["newton","third law","teesra niyam","action reaction"], en: "Newton's Third Law states that for every action, there is an equal and opposite reaction. When you push against a wall, the wall pushes back with the same force. This is why rockets work — they push hot gas downward, and the gas pushes the rocket upward!", hi: "Newton ka teesra niyam kehta hai ki har kriya ki ek barabar aur vipareet pratikriya hoti hai. Jab aap deewar ko dhakelte ho, toh deewar bhi utni hi force se aapko push karti hai. Isliye rocket kaam karta hai — woh neeche gas push karta hai, aur gas rocket ko upar push karti hai!" },
+  { keys: ["machine learning","ml ","ai ","artificial intelligence","fark","difference between ai"], en: "Machine Learning is a subset of AI where systems learn from data without being explicitly programmed. Think of it this way:\n\n• AI = the broad goal of making machines intelligent\n• ML = a specific approach where machines learn from examples\n• Deep Learning = ML using neural networks with many layers\n\nFor example, Netflix recommendations use ML — it learns your preferences from what you watch.", hi: "Dekho bhai, AI ek bada concept hai — machines ko intelligent banana. ML uska ek subset hai jismein machine data se khud seekhti hai. Deep Learning mein neural networks use hote hain.\n\nSimple example: Netflix ka recommendation system ML use karta hai — tumhare dekhne ke pattern se seekhta hai ki tumhe kya pasand aayega!" },
+  { keys: ["exam","taiyaari","prep","study","padhai","test tomorrow","revision"], en: "Here are proven exam prep strategies:\n\n1. Active recall — test yourself instead of re-reading notes\n2. Spaced repetition — review at increasing intervals\n3. Feynman technique — explain topics out loud in simple words\n4. Previous year papers — solve under timed conditions\n5. Pomodoro method — 25 min focus, 5 min break\n6. Sleep well the night before — your brain consolidates memory during sleep\n\nWhich subject is your exam in? I can help with specific topics!", hi: "Exam prep ke liye tried-and-tested tips:\n\n1. Active recall — notes dobara padhne ke bajaye khud ko test karo\n2. Spaced repetition — badhte intervals mein revise karo\n3. Feynman technique — topics ko simple words mein bolo\n4. Previous year papers — time limit mein solve karo\n5. Pomodoro — 25 min padho, 5 min break\n6. Raat ko achhi neend lo!\n\nKonsa subject hai? Main specific topics mein help kar sakta hoon!" },
+  { keys: ["weather","mausam","temperature","barish","rain","hot","cold","sunny"], en: "I don't have access to live weather data, but I can help you understand weather patterns! For real-time weather, try Google or a weather app.\n\nFun fact: India has 6 climate zones ranging from alpine in the Himalayas to tropical in Kerala. What city are you curious about?", hi: "Mujhe live weather data available nahi hai, but weather patterns samjhane mein help kar sakta hoon! Real-time ke liye Google ya weather app check karo.\n\nInteresting fact: India mein 6 climate zones hain — Himalayas ka alpine se lekar Kerala ka tropical tak!" },
+  { keys: ["code","python","javascript","program","function","bug","debug","coding"], en: "I can help with coding! Here's a quick example — a Python function to check prime numbers:\n\n```python\ndef is_prime(n):\n    if n < 2: return False\n    for i in range(2, int(n**0.5) + 1):\n        if n % i == 0: return False\n    return True\n```\n\nWhat language are you working in? Share your code and I'll help debug or explain it.", hi: "Coding mein help kar sakta hoon! Ye dekho ek Python example — prime number check:\n\n```python\ndef is_prime(n):\n    if n < 2: return False\n    for i in range(2, int(n**0.5) + 1):\n        if n % i == 0: return False\n    return True\n```\n\nKonsi language mein kaam kar rahe ho? Code share karo, debug kar dunga!" },
+  { keys: ["essay","write","likh","paragraph","article","blog","letter"], en: "I'd love to help you write! Here's a solid essay structure:\n\n📝 Introduction — Hook + thesis statement\n📝 Body (3 paragraphs) — Each with topic sentence + evidence + analysis\n📝 Conclusion — Restate thesis + broader implications\n\nWhat's your topic? Give me the subject and word count, and I'll draft an outline or the full essay.", hi: "Writing mein help karunga! Essay ka structure ye hai:\n\n📝 Introduction — Hook + main point\n📝 Body (3 paragraphs) — Har ek mein point + evidence + analysis\n📝 Conclusion — Summary + bigger picture\n\nTopic kya hai? Subject aur word count batao, outline ya full essay draft kar dunga." },
+  { keys: ["math","calculate","equation","solve","algebra","calculus","formula","integral","derivative"], en: "I can help with math! Share your problem and I'll solve it step by step.\n\nI'm good with:\n• Algebra & equations\n• Calculus (derivatives, integrals)\n• Statistics & probability\n• Geometry & trigonometry\n• Linear algebra\n\nJust type or paste your problem!", hi: "Math mein help karunga! Problem share karo, step by step solve karunga.\n\nYe sab kar sakta hoon:\n• Algebra & equations\n• Calculus (derivatives, integrals)\n• Statistics & probability\n• Geometry & trigonometry\n\nBas problem type ya paste karo!" },
+  { keys: ["translate","hindi","english","meaning","matlab","translation"], en: "I can translate between Hindi, English, and many other languages! Just share the text you want translated and tell me the target language.\n\nExample: 'Translate to Hindi: The weather is nice today'\n→ आज मौसम अच्छा है", hi: "Translation mein help kar sakta hoon! Text share karo aur batao kaunsi language mein chahiye.\n\nExample: 'Translate to English: आज मौसम अच्छा है'\n→ The weather is nice today" },
+  { keys: ["thank","thanks","shukriya","dhanyavaad","thnx","thx"], en: "You're welcome! 😊 Feel free to ask anything else — I'm here to help.", hi: "Koi baat nahi! 😊 Aur kuch help chahiye toh poocho, main hoon yahan." },
+  { keys: ["joke","funny","hasa","laugh","maza"], en: "Here's one for you:\n\nWhy do programmers prefer dark mode?\n\nBecause light attracts bugs! 🐛😄\n\nWant another one?", hi: "Ye suno:\n\nProgrammer dark mode kyun use karte hain?\n\nKyunki light se bugs aate hain! 🐛😄\n\nAur sunna hai?" },
+  { keys: ["who are you","what are you","kya ho tum","kaun ho","about you","your name"], en: "I'm ChatGPT, an AI assistant made by OpenAI! I can help with questions, writing, coding, math, brainstorming, and much more.\n\nThis is a prototype demonstrating voice input features for Indian users — including Hinglish support, whisper mode, and privacy controls. Try tapping the mic button! 🎙️", hi: "Main ChatGPT hoon, OpenAI ka AI assistant! Questions, writing, coding, math, brainstorming — sab mein help kar sakta hoon.\n\nYe ek prototype hai jo Indian users ke liye voice input features demo karta hai — Hinglish support, whisper mode, aur privacy controls. Mic button try karo! 🎙️" },
+  { keys: ["motivation","motivate","inspire","sad","udaas","stressed","tension"], en: "Here's something to keep you going:\n\n\"The only way to do great work is to love what you do.\" — Steve Jobs\n\nRemember: every expert was once a beginner. You're making progress even when it doesn't feel like it. Take a deep breath, break your task into small steps, and tackle them one at a time. You've got this! 💪", hi: "Ye yaad rakho:\n\n\"Safalta ka raasta mushkilon se hokar jaata hai.\"\n\nHar expert kabhi beginner tha. Progress ho raha hai chahe feel na ho. Ek deep breath lo, kaam ko chote steps mein todo, aur ek ek karke karo. Tum kar sakte ho! 💪" },
+  { keys: ["physics","gravity","force","energy","motion","speed","velocity"], en: "Physics is fascinating! Here are some key concepts:\n\n⚡ Force = mass × acceleration (F = ma)\n⚡ Energy can't be created or destroyed, only converted\n⚡ Every object in motion stays in motion unless acted upon by a force\n\nWhich specific topic do you need help with? Mechanics, thermodynamics, optics, electromagnetism?", hi: "Physics bahut interesting hai! Key concepts:\n\n⚡ Force = mass × acceleration (F = ma)\n⚡ Energy na banti hai na destroy hoti hai, sirf convert hoti hai\n⚡ Motion mein cheez motion mein rehti hai jab tak force na lage\n\nKonsa specific topic hai? Mechanics, thermo, optics, electromagnetism?" },
+  { keys: ["history","itihas","mughal","british","independence","1947","war","ancient"], en: "I love history questions! India has an incredibly rich history spanning thousands of years:\n\n🏛️ Indus Valley Civilization (3300-1300 BCE)\n👑 Maurya & Gupta empires\n🕌 Medieval period & Mughal era\n🇮🇳 Freedom struggle & Independence (1947)\n\nWhich period or event would you like to explore?", hi: "History ke questions pasand hain! India ka itihaas hazaaron saal purana hai:\n\n🏛️ Sindhu Ghati Sabhyata (3300-1300 BCE)\n👑 Maurya aur Gupta samrajya\n🕌 Mughal kaal\n🇮🇳 Azaadi ki ladaai aur 1947\n\nKaunsa period ya event jaanna hai?" },
+];
+
+function getResponse(text, hinglish) {
+  const t = text.toLowerCase().trim();
+  for (const rule of RESPONSE_RULES) {
+    if (rule.keys.some(k => t.includes(k))) {
+      return hinglish ? rule.hi : rule.en;
+    }
+  }
+  // Fallback: echo a helpful response referencing what they said
+  const fallbacks_en = [
+    "That's a great question about \"" + text.slice(0,40).trim() + "\"! In a full version, I'd search the web or use my training data to give you a detailed answer. For this prototype, try asking about:\n\n• Newton's laws or physics\n• AI vs Machine Learning\n• Exam preparation tips\n• Coding help\n• Essay writing\n• Math problems\n• Translation\n\nOr try the mic button for voice input! 🎙️",
+    "Interesting! I'd love to help with that. This prototype has hardcoded responses for common student queries. Try:\n\n• \"Explain Newton's third law\"\n• \"AI vs ML difference\"\n• \"Help me study for exams\"\n• \"Write me an essay\"\n• \"Tell me a joke\"\n\nAlso try toggling Hinglish mode and using the mic! 🗣️",
+  ];
+  const fallbacks_hi = [
+    "Achha sawal hai! Full version mein detailed answer milega. Is prototype mein ye try karo:\n\n• Newton's laws ya physics\n• AI vs Machine Learning\n• Exam prep tips\n• Coding help\n• Essay writing\n• Math problems\n\nMic button bhi try karo voice input ke liye! 🎙️",
+    "Interesting! Help karna chahunga. Prototype mein common student queries ke liye responses hain. Try karo:\n\n• \"Newton ka third law samjhao\"\n• \"AI aur ML mein fark\"\n• \"Exam ki taiyaari\"\n• \"Joke sunao\"\n\nHinglish toggle aur mic button bhi try karo! 🗣️",
+  ];
+  const arr = hinglish ? fallbacks_hi : fallbacks_en;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+const TRANSCRIPTS = [
+  { en: "Explain Newton's third law in simple terms", hi: "Newton ka third law samjhao simple mein" },
+  { en: "What is the difference between AI and ML?", hi: "Bhai AI aur ML mein kya fark hai?" },
+  { en: "Help me prepare for my physics exam", hi: "Physics exam ki taiyaari mein help karo" },
+];
+
+function App() {
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [typing, setTyping] = useState(false);
+  const [nudge, setNudge] = useState(true);
+  const [hinglish, setHinglish] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
+  const [voice, setVoice] = useState("idle");
+  const [transcript, setTranscript] = useState("");
+  const [whisper, setWhisper] = useState(false);
+  const [on, setOn] = useState({ nudge: true, whisper: true, privacy: true, hinglish: true });
+  const endRef = useRef(null);
+  const timer = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, typing]);
+  useEffect(() => { if (nudge && on.nudge) { const t = setTimeout(() => setNudge(false), 6000); return () => clearTimeout(t); } }, [nudge, on.nudge]);
+
+  const send = (text) => {
+    if (!text.trim()) return;
+    setMsgs(p => [...p, { role: "user", text: text.trim() }]);
+    setInput(""); setTyping(true);
+    setTimeout(() => {
+      setMsgs(p => [...p, { role: "assistant", text: getResponse(text, hinglish && on.hinglish) }]);
+      setTyping(false);
+    }, 800 + Math.random() * 600);
+  };
+
+  const startVoice = (isWhisper) => {
+    setWhisper(isWhisper); setVoice("listening"); setPrivacy(false);
+    const pick = TRANSCRIPTS[Math.floor(Math.random() * TRANSCRIPTS.length)];
+    const t = (hinglish && on.hinglish) ? pick.hi : pick.en;
+    setTimeout(() => {
+      setTranscript(t);
+      if (isWhisper && on.whisper) { setVoice("preview"); }
+      else { setVoice("idle"); send(t); }
+    }, 1800);
+  };
+
+  const micDown = () => { timer.current = setTimeout(() => { if (on.whisper) startVoice(true); }, 500); };
+  const micUp = () => { if (timer.current) { clearTimeout(timer.current); if (voice === "idle") startVoice(false); } };
+
+  const toggle = k => setOn(p => ({...p, [k]: !p[k]}));
+  const concepts = [
+    { k: "nudge", l: "💡 Nudge", c: "#10a37f" },
+    { k: "whisper", l: "🤫 Whisper", c: "#00b4d8" },
+    { k: "privacy", l: "🛡️ Privacy", c: "#a78bfa" },
+    { k: "hinglish", l: "🗣️ Hinglish", c: "#ffb703" },
+  ];
+  const chips = hinglish && on.hinglish
+    ? ["Newton ka third law samjhao", "AI aur ML mein fark?", "Exam taiyaari tips"]
+    : ["Explain Newton's third law", "AI vs Machine Learning?", "Help me prep for exams"];
+
+  return (
+    <>
+      {/* Toggles */}
+      <div className="toggle-bar">
+        <span>CONCEPTS:</span>
+        {concepts.map(c => (
+          <button key={c.k} className={`toggle-btn ${on[c.k] ? "on" : "off"}`}
+            style={on[c.k] ? {"--c": c.c, "--c-bg": c.c+"20", color: c.c, borderColor: c.c, background: c.c+"20"} : {}}
+            onClick={() => toggle(c.k)}>{c.l}</button>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="header">
+        <div className="header-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/></svg>
+        </div>
+        <div>
+          <div style={{fontSize:15,fontWeight:600}}>ChatGPT</div>
+          <div style={{fontSize:11,color:"#777"}}>Voice Prototype — India</div>
+        </div>
+        {on.hinglish && (
+          <div className="lang-toggle">
+            <span style={{color: hinglish?"#777":"#fff", fontWeight: hinglish?400:700}}>EN</span>
+            <div className="switch" style={{background: hinglish?"#10a37f":"#444", justifyContent: hinglish?"flex-end":"flex-start"}}
+              onClick={() => setHinglish(!hinglish)}>
+              <div className="knob"/>
+            </div>
+            <span style={{color: hinglish?"#10a37f":"#777", fontWeight: hinglish?700:400}}>हिं</span>
+          </div>
+        )}
+      </div>
+
+      {/* Chat */}
+      <div className="chat">
+        {msgs.length === 0 && (
+          <div className="welcome">
+            <div className="welcome-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div style={{fontSize:18,fontWeight:600,marginBottom:4}}>How can I help you today?</div>
+            <div style={{fontSize:13,color:"#777"}}>
+              {hinglish && on.hinglish ? "Hindi-English mein poocho, main samajh lunga!" : "Try asking about Newton's laws, ML, or exam prep"}
+            </div>
+            <div className="quick-chips">
+              {chips.map((q,i) => <button key={i} className="chip" onClick={() => send(q)}>{q}</button>)}
+            </div>
+          </div>
+        )}
+        {msgs.map((m,i) => (
+          <div key={i} className={`msg ${m.role}`}>
+            <div className={`bubble ${m.role}`}>{m.text}</div>
+          </div>
+        ))}
+        {typing && <div className="msg assistant"><div className="typing"><div className="dot"/><div className="dot"/><div className="dot"/></div></div>}
+        <div ref={endRef}/>
+      </div>
+
+      {/* Voice listening */}
+      {voice === "listening" && (
+        <div className="voice-overlay">
+          <div style={{fontSize:12,color:whisper?"#00b4d8":"#10a37f",fontWeight:600,marginBottom:12,letterSpacing:1}}>
+            {whisper ? "🤫 WHISPER MODE — Listening softly..." : "🎙️ Listening..."}
+          </div>
+          <div className="wave-bars">
+            {Array.from({length:20}).map((_,i) => {
+              const h = 6 + Math.random() * (whisper ? 16 : 28);
+              return <div key={i} className="wave-bar" style={{
+                background: whisper?"#00b4d8":"#10a37f",
+                animation: `waveBar 0.6s ease infinite ${i*0.05}s`,
+                "--h": h+"px"
+              }}/>;
+            })}
+          </div>
+          <button onClick={() => setVoice("idle")} style={{
+            marginTop:16,padding:"8px 24px",borderRadius:20,border:"1px solid #444",
+            background:"transparent",color:"#999",fontSize:12,cursor:"pointer",fontFamily:"inherit"
+          }}>Cancel</button>
+        </div>
+      )}
+
+      {/* Whisper preview */}
+      {voice === "preview" && on.whisper && (
+        <div className="preview-panel">
+          <div style={{fontSize:11,color:"#00b4d8",fontWeight:600,marginBottom:6}}>🤫 Whisper captured — review before sending:</div>
+          <div className="preview-text">{transcript}</div>
+          <div className="preview-actions">
+            <button className="btn-send" onClick={() => {setVoice("idle"); send(transcript);}}>✓ Send</button>
+            <button className="btn-ghost" onClick={() => {setVoice("idle"); setInput(transcript);}}>✎ Edit</button>
+            <button className="btn-ghost" onClick={() => startVoice(true)}>🔄 Redo</button>
+            <button className="btn-ghost" style={{color:"#777"}} onClick={() => {setVoice("idle"); setTranscript("");}}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Privacy panel */}
+      {privacy && on.privacy && voice === "idle" && (
+        <div className="privacy-panel">
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#10a37f"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+            <span style={{fontSize:13,color:"#10a37f",fontWeight:700}}>Voice Privacy</span>
+            <button onClick={() => setPrivacy(false)} style={{marginLeft:"auto",background:"none",border:"none",color:"#666",cursor:"pointer",fontSize:16}}>×</button>
+          </div>
+          <div style={{fontSize:12,color:"#aaa",lineHeight:1.6}}>
+            Your voice is converted to text <strong style={{color:"#e5e5e5"}}>in real-time</strong> and is <strong style={{color:"#e5e5e5"}}>not saved or stored</strong> by OpenAI. Only the text transcript is sent.
+          </div>
+        </div>
+      )}
+
+      {/* Input bar */}
+      {voice === "idle" && (
+        <div className="input-bar">
+          {nudge && on.nudge && msgs.length === 0 && (
+            <div className="nudge-tooltip">
+              <strong>Tip:</strong> Tap the mic to ask by voice — works in {on.hinglish ? "Hindi & English" : "English"}!
+              {on.whisper && <><br/><span style={{opacity:0.8,fontSize:11}}>Long-press for whisper mode 🤫</span></>}
+              <div className="arrow"/>
+              <button className="close" onClick={() => setNudge(false)}>×</button>
+            </div>
+          )}
+          {input.length > 80 && on.nudge && (
+            <div className="long-nudge">💡 Long prompt? Try voice — it's 3x faster! {on.whisper && "Long-press mic for whisper mode."}</div>
+          )}
+          <div className="input-row">
+            <input className="text-input" value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && send(input)}
+              placeholder={hinglish && on.hinglish ? "Kuch bhi poocho..." : "Message ChatGPT..."}/>
+            <div style={{position:"relative"}}>
+              <button className="mic-btn" onMouseDown={micDown} onMouseUp={micUp}
+                onTouchStart={micDown} onTouchEnd={micUp}
+                onClick={() => {setNudge(false); setPrivacy(false);}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e5e5e5" strokeWidth="2.2" strokeLinecap="round">
+                  <rect x="9" y="1" width="6" height="14" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+              </button>
+              {on.privacy && (
+                <div className="shield-badge" onClick={e => {e.stopPropagation(); setPrivacy(!privacy);}}>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="#fff"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+                </div>
+              )}
+            </div>
+            {input.trim() && (
+              <button className="send-btn" onClick={() => send(input)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            )}
+          </div>
+          {on.whisper && <div className="whisper-hint">Tap mic to speak · Long-press for whisper mode</div>}
+        </div>
+      )}
+    </>
+  );
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById("app"));
+</script>
+</body>
+</html>
